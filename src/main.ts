@@ -39,7 +39,7 @@ const vertexBuffer = device.createBuffer({
 
 device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/0, vertices);
 
-const vertexBufferLayout = {
+const vertexBufferLayout: GPUVertexBufferLayout = {
   arrayStride: 8,
   attributes: [{
     format: "float32x2",
