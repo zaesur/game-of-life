@@ -2,6 +2,7 @@ import shader from "./shader.wgsl?raw";
 import { configureContext, getDevice } from "./utils";
 
 const GRID_SIZE = 32;
+const UPDATE_INTERVAL = 200;
 
 const canvas = document.querySelector("canvas")!;
 const device = await getDevice();
@@ -9,15 +10,14 @@ const { context, format } = configureContext(canvas, device);
 
 // prettier-ignore
 const vertices = new Float32Array([
-  //   X,    Y,
-    -0.8, -0.8, // Triangle 1 (Blue)
+    -0.8, -0.8,
      0.8, -0.8,
      0.8,  0.8,
   
-    -0.8, -0.8, // Triangle 2 (Red)
+    -0.8, -0.8,
      0.8,  0.8,
     -0.8,  0.8,
-  ]);
+]);
 
 const vertexBuffer = device.createBuffer({
   label: "Cell vertices",
@@ -25,15 +25,14 @@ const vertexBuffer = device.createBuffer({
   usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 });
 
-device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices);
-
+device.queue.writeBuffer(vertexBuffer, 0, vertices);
 
 const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE]);
 const uniformBuffer = device.createBuffer({
   label: "Grid Uniforms",
   size: uniformArray.byteLength,
-  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-})
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+});
 
 device.queue.writeBuffer(uniformBuffer, 0, uniformArray);
 
@@ -43,7 +42,7 @@ const vertexBufferLayout: GPUVertexBufferLayout = {
     {
       format: "float32x2",
       offset: 0,
-      shaderLocation: 0, // Position, see vertex shader
+      shaderLocation: 0,
     },
   ],
 };
@@ -64,37 +63,44 @@ const cellPipeline = device.createRenderPipeline({
   fragment: {
     module: cellShaderModule,
     entryPoint: "fragmentMain",
-    targets: [
-      {
-        format,
-      },
-    ],
+    targets: [{ format }],
   },
 });
 
 const bindGroup = device.createBindGroup({
   label: "Cell renderer bind group",
   layout: cellPipeline.getBindGroupLayout(0),
-  entries: [{
-    binding: 0,
-    resource: { buffer: uniformBuffer },
-  }]
-})
-
-const encoder = device.createCommandEncoder();
-const pass = encoder.beginRenderPass({
-  colorAttachments: [
+  entries: [
     {
-      view: context.getCurrentTexture().createView(),
-      loadOp: "clear",
-      clearValue: { r: 0, g: 0, b: 0.4, a: 1 },
-      storeOp: "store",
+      binding: 0,
+      resource: { buffer: uniformBuffer },
     },
   ],
 });
-pass.setPipeline(cellPipeline);
-pass.setVertexBuffer(0, vertexBuffer);
-pass.setBindGroup(0, bindGroup);
-pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE); // 6 vertices
-pass.end();
-device.queue.submit([encoder.finish()]);
+
+const updateGrid = () => {
+  // Start a render pass.
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [
+      {
+        view: context.getCurrentTexture().createView(),
+        loadOp: "clear",
+        clearValue: { r: 0, g: 0, b: 0.4, a: 1 },
+        storeOp: "store",
+      },
+    ],
+  });
+
+  // Draw the grid.
+  pass.setPipeline(cellPipeline);
+  pass.setBindGroup(0, bindGroup);
+  pass.setVertexBuffer(0, vertexBuffer);
+  pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
+
+  // End the render pass and submit the command buffer.
+  pass.end();
+  device.queue.submit([encoder.finish()]);
+};
+
+setInterval(updateGrid, UPDATE_INTERVAL);
